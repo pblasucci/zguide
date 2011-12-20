@@ -52,7 +52,8 @@ let main () =
     sendRequest 1
   finally
     (!client :> IDisposable).Dispose()
-    
-  EXIT_SUCCESS
 
+  //HACK: why do we need an explicit call to `exit`?!
+  exit EXIT_SUCCESS
+  
 main()

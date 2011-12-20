@@ -81,3 +81,12 @@ let t_spawnp fn p =
   let t = System.Threading.Thread(fn')
   t.Start(p)
   t
+
+let pollIn  fn sck = Poll(ZMQ.POLLIN                ,sck,fn)
+let pollOut fn sck = Poll(               ZMQ.POLLOUT,sck,fn)
+let pollIO  fn sck = Poll(ZMQ.POLLIN ||| ZMQ.POLLOUT,sck,fn)
+
+let tryParseInt v =
+  match System.Int32.TryParse v with
+  | true,n  -> Some n
+  | _       -> None
