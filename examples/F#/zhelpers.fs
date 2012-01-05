@@ -86,6 +86,10 @@ let pollIn  fn sck = Poll(ZMQ.POLLIN                ,sck,fn)
 let pollOut fn sck = Poll(               ZMQ.POLLOUT,sck,fn)
 let pollIO  fn sck = Poll(ZMQ.POLLIN ||| ZMQ.POLLOUT,sck,fn)
 
+let [<Literal>] IMMEDIATE =    0L
+let [<Literal>] FOREVER   =   -1L
+let [<Literal>] POLL_MSEC = 1000L
+
 let tryParseInt v =
   match System.Int32.TryParse v with
   | true,n  -> Some n

@@ -25,10 +25,11 @@ let main () =
   let rec loop cycles =
     let request = server |> recv
     let continue' n = 
-      sleep n
+      sleep n // do some heavy work
       request |>> server
       loop (cycles + 1)
 
+    // simulate various problems, after a few cycles
     match cycles,(rand.Next 3) with
     | n,0 when n > 3  ->  printfn "I: simulating a crash"
     | n,1 when n > 3  ->  printfn "I: simulating CPU overload"
