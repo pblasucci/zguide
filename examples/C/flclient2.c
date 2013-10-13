@@ -1,40 +1,31 @@
-//
 //  Freelance client - Model 2
 //  Uses DEALER socket to blast one or more services
-//
+
 #include "czmq.h"
 
-//  If not a single service replies within this time, give up
-#define GLOBAL_TIMEOUT 2500
-
-//  We design our client API as a class
-
+//  We design our client API as a class, using the CZMQ style
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-//  Opaque class structure
 typedef struct _flclient_t flclient_t;
-
-flclient_t *
-    flclient_new (void);
-void
-    flclient_destroy (flclient_t **self_p);
-void
-    flclient_connect (flclient_t *self, char *endpoint);
-zmsg_t *
-    flclient_request (flclient_t *self, zmsg_t **request_p);
+flclient_t *flclient_new (void);
+void        flclient_destroy (flclient_t **self_p);
+void        flclient_connect (flclient_t *self, char *endpoint);
+zmsg_t     *flclient_request (flclient_t *self, zmsg_t **request_p);
 
 #ifdef __cplusplus
 }
 #endif
 
+//  If not a single service replies within this time, give up
+#define GLOBAL_TIMEOUT 2500
 
 int main (int argc, char *argv [])
 {
     if (argc == 1) {
         printf ("I: syntax: %s <endpoint> ...\n", argv [0]);
-        exit (EXIT_SUCCESS);
+        return 0;
     }
     //  Create new freelance client object
     flclient_t *client = flclient_new ();
@@ -64,10 +55,10 @@ int main (int argc, char *argv [])
     return 0;
 }
 
-
-
-//  --------------------------------------------------------------------
-//  Structure of our class
+//  .split class implementation
+//  Here is the {{flclient}} class implementation. Each instance has a 
+//  context, a DEALER socket it uses to talk to the servers, a counter 
+//  of how many servers it's connected to, and a request sequence number:
 
 struct _flclient_t {
     zctx_t *ctx;        //  Our context wrapper
@@ -76,8 +67,6 @@ struct _flclient_t {
     uint sequence;      //  Number of requests ever sent
 };
 
-
-//  --------------------------------------------------------------------
 //  Constructor
 
 flclient_t *
@@ -92,7 +81,6 @@ flclient_new (void)
     return self;
 }
 
-//  --------------------------------------------------------------------
 //  Destructor
 
 void
@@ -107,7 +95,6 @@ flclient_destroy (flclient_t **self_p)
     }
 }
 
-//  --------------------------------------------------------------------
 //  Connect to new server endpoint
 
 void
@@ -118,9 +105,12 @@ flclient_connect (flclient_t *self, char *endpoint)
     self->servers++;
 }
 
-//  --------------------------------------------------------------------
-//  Send request, get reply
-//  Destroys request after sending
+//  .split request method
+//  This method does the hard work. It sends a request to all
+//  connected servers in parallel (for this to work, all connections
+//  must be successful and completed by this time). It then waits
+//  for a single successful reply, and returns that to the caller.
+//  Any other replies are just dropped:
 
 zmsg_t *
 flclient_request (flclient_t *self, zmsg_t **request_p)
@@ -158,6 +148,7 @@ flclient_request (flclient_t *self, zmsg_t **request_p)
             free (sequence);
             if (sequence_nbr == self->sequence)
                 break;
+            zmsg_destroy (&reply);
         }
     }
     zmsg_destroy (request_p);

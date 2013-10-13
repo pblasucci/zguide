@@ -2,49 +2,50 @@
 //  Multithreaded Hello World server
 //
 
-//  Author:     Michael Compton
-//  Email:      michael.compton@littleedge.co.uk
+//  Author:     Michael Compton, Tomas Roos
+//  Email:      michael.compton@littleedge.co.uk, ptomasroos@gmail.com
 
-using System;
 using System.Text;
 using System.Threading;
-using ZMQ;
+using ZeroMQ;
+using ZeroMQ.Devices;
 
-namespace ZMQGuide {
-    class Program {
+namespace zguide.mtserver
+{
+    internal class Program
+    {
+        public static void Main(string[] args)
+        {
+            using (var context = ZmqContext.Create())
+            {
 
-        static void WorkerRoutine(object context) {
-            //  Socket to talk to dispatcher
-            Socket receiver = ((Context)context).Socket(SocketType.REP);
-            receiver.Connect("inproc://workers");
-            while (true) {
-                string message = receiver.Recv(Encoding.Unicode);
-                //  Do some 'work'
-                Thread.Sleep(1000);
-                //  Send reply back to client
-                receiver.Send("World", Encoding.Unicode);
+                using (var queue = new ZeroMQ.Devices.QueueDevice(context, "tcp://*:5555", "inproc://workers", DeviceMode.Blocking))
+                {
+                    queue.Initialize();
+                    var workerThreads = new Thread[5];
+                    for (int threadId = 0; threadId < workerThreads.Length; threadId++)
+                    {
+                        workerThreads[threadId] = new Thread(WorkerRoutine);
+                        workerThreads[threadId].Start(context);
+                    }
+                    queue.Start();
+                }
+
             }
         }
 
-        static void Main(string[] args) {
-            using (Context context = new Context(1)) {
-                using (Socket clients = context.Socket(SocketType.XREP),
-                workers = context.Socket(SocketType.XREQ)) {
-                    //  Socket to talk to clients
-                    clients.Bind("tcp://*:5555");
-                    //  Socket to talk to workers
-                    workers.Bind("inproc://workers");
-                    
-                    //  Launch pool of worker threads
-                    Thread[] workerThreads = new Thread[5];
-                    for (int count = 0; count < workerThreads.Length; count++) {
-                        workerThreads[count] = new Thread(WorkerRoutine);
-                        workerThreads[count].Start(context);
-                    }
+        private static void WorkerRoutine(object context)
+        {
+            ZmqSocket receiver = ((ZmqContext)context).CreateSocket(SocketType.REP);
+            receiver.Connect("inproc://workers");
 
-                    //  Connect work threads to client threads via a queue
-                    Socket.Device.Queue(clients, workers);
-                }
+            while (true)
+            {
+                string message = receiver.Receive(Encoding.Unicode);
+
+                Thread.Sleep(1000); //  Simulate 'work'
+                
+                receiver.Send("World", Encoding.Unicode);
             }
         }
     }

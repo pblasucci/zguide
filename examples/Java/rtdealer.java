@@ -1,96 +1,94 @@
-/**
- * Custom routing Router to Dealer. (XREP to XREQ)
- * Java version, based on the C version from
- * http://zguide.zeromq.org/chapter:all#toc45
- */
-
 import org.zeromq.ZMQ;
+import org.zeromq.ZMQ.Context;
+import org.zeromq.ZMQ.Socket;
 
-import java.util.Arrays;
 import java.util.Random;
 
-
 /**
- * Router-to-dealer custom routing demo.
- *
- * The router, in this case the main function, uses XREP.  The
- * dealers, in this case the two worker threads, use XREQ.
+ * ROUTER-TO-REQ example
  */
-public class rtdealer {
-    static final String URI = "ipc://routing.ipc";
-    static final int NOFLAGS = 0;
+public class rtdealer
+{
+    private static Random rand = new Random();
+    private static final int NBR_WORKERS = 10;
 
-    /**
-     * Worker runnable consumes messages until it receives an END
-     * message.
-     */
-    public static class Worker implements Runnable {
-        public final String name;
-        private final byte[] END = "END".getBytes();
+    private static class Worker extends Thread {
 
-        Worker(String name) { this.name = name; }
-
+        @Override
         public void run() {
-            ZMQ.Context context = ZMQ.context(1);
-            ZMQ.Socket socket = context.socket(ZMQ.XREQ);
-            socket.setIdentity(name.getBytes());
-            socket.connect(URI);
+
+            Context context = ZMQ.context(1);
+            Socket worker = context.socket(ZMQ.DEALER);
+            ZHelper.setId (worker);  //  Set a printable identity
+
+            worker.connect("tcp://localhost:5671");
 
             int total = 0;
-            boolean finished = false;
-            while (!finished) {
-                byte[] data = socket.recv(NOFLAGS);
-                if (Arrays.equals(data, END)) {
-                    finished = true;
-                    System.out.println(
-                        String.format(
-                            "Worker %s received %d messages.", name, total
-                        )
-                    );
+            while (true) {
+                //  Tell the broker we're ready for work
+                worker.sendMore ("");
+                worker.send ("Hi Boss");
+
+                //  Get workload from broker, until finished
+                worker.recvStr ();   //  Envelope delimiter
+                String workload = worker.recvStr ();
+                boolean finished = workload.equals ("Fired!");
+                if (finished) {
+                    System.out.printf ("Completed: %d tasks\n", total);
+                    break;
                 }
-                total += 1;
+                total++;
+
+                //  Do some random work
+                try {
+                    Thread.sleep (rand.nextInt (500) + 1);
+                } catch (InterruptedException e) {
+                }
             }
-            socket.close();
+            worker.close();
             context.term();
         }
     }
 
-    /* Random number generator to determine message distribution. */
-    private static Random rand = new Random();
 
-    public static void main(String[] args)
-    throws InterruptedException {
-        ZMQ.Context context = ZMQ.context(1);
-        ZMQ.Socket socket = context.socket(ZMQ.XREP);
-        socket.bind(URI);
+    /**
+     * While this example runs in a single process, that is just to make
+     * it easier to start and stop the example. Each thread has its own
+     * context and conceptually acts as a separate process.
+     */
+    public static void main (String[] args) throws Exception {
+        Context context = ZMQ.context(1);
+        Socket broker = context.socket(ZMQ.ROUTER);
+        broker.bind("tcp://*:5671");
 
-        Thread workerA = new Thread(new Worker("A"));
-        Thread workerB = new Thread(new Worker("B"));
-        workerA.start();
-        workerB.start();
-
-        // Wait a second for the workers to connect their sockets.
-        System.out.println("Workers started, sleeping 1 second for warmup.");
-        Thread.sleep(1000);
-
-        // Send 10 tasks, scattered to A twice as often as B.
-        for (int i = 0; i < 10; i += 1) {
-            byte[] address;
-            if (rand.nextInt() % 3 == 0) { // 1/3 to B.
-                address = "B".getBytes();
-            } else { // 2/3 to A.
-                address = "A".getBytes();
-            }
-            socket.send(address, ZMQ.SNDMORE);
-            socket.send("This is the workload.".getBytes(), NOFLAGS);
+        for (int workerNbr = 0; workerNbr < NBR_WORKERS; workerNbr++)
+        {
+            Thread worker = new Worker ();
+            worker.start ();
         }
-        socket.send("A".getBytes(), ZMQ.SNDMORE);
-        socket.send("END".getBytes(), NOFLAGS);
 
-        socket.send("B".getBytes(), ZMQ.SNDMORE);
-        socket.send("END".getBytes(), NOFLAGS);
+        //  Run for five seconds and then tell workers to end
+        long endTime = System.currentTimeMillis () + 5000;
+        int workersFired = 0;
+        while (true) {
+            //  Next message gives us least recently used worker
+            String identity = broker.recvStr ();
+            broker.sendMore (identity);
+            broker.recv (0);     //  Envelope delimiter
+            broker.recv (0);     //  Response from worker
+            broker.sendMore ("");
 
-        socket.close();
+            //  Encourage workers until it's time to fire them
+            if (System.currentTimeMillis () < endTime)
+                broker.send ("Work harder");
+            else {
+                broker.send ("Fired!");
+                if (++workersFired == NBR_WORKERS)
+                    break;
+            }
+        }
+
+        broker.close();
         context.term();
     }
 }

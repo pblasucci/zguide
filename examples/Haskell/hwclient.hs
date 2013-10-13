@@ -3,23 +3,23 @@
 -- Binds REQ socket to tcp://localhost:5555
 -- Sends "Hello" to server, expects "World" back
 -- 
--- Translated to Haskell by ERDI Gergo http://gergo.erdi.hu/
+-- Originally translated to Haskell by ERDI Gergo http://gergo.erdi.hu/
 
 module Main where
 
-import System.ZMQ
+import System.ZMQ3.Monadic
 import Control.Monad (forM_)
 import Data.ByteString.Char8 (pack, unpack)
 
-main = withContext 1 $ \context -> do  
-  putStrLn "Connecting to Hello World server..."  
-  withSocket context Req $ \socket -> do
-    connect socket "tcp://localhost:5555"
-    forM_ [1..10] $ \i -> do
-      putStrLn $ unwords ["Sending request", show i]
-      send socket request []
-    
-      reply <- receive socket []
-      putStrLn $ unwords ["Received reply:", unpack reply]    
+main :: IO ()
+main = 
+    runZMQ $ do
+        liftIO $ putStrLn "Connecting to Hello World server..."  
+        reqSocket <- socket Req
+        connect reqSocket "tcp://localhost:5555"
+        forM_ [1..10] $ \i -> do
+            liftIO $ putStrLn $ unwords ["Sending request", show i]
+            send reqSocket [] (pack "Hello")
+            reply <- receive reqSocket
+            liftIO $ putStrLn $ unwords ["Received reply:", unpack reply]    
 
-  where request = pack "Hello"

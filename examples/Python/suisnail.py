@@ -35,7 +35,7 @@ def subscriber(pipe):
         if (time.time() - clock > MAX_ALLOWED_DELAY):
             print >> sys.stderr, "E: subscriber cannot keep up, aborting\n",
             break
-        
+
         # Work for 1 msec plus some random additional time
         time.sleep(1e-3 * (1+2*random.random()))
     pipe.send("gone and died")
@@ -55,7 +55,7 @@ def publisher(pipe):
         # Send current clock (secs) to subscribers
         pub.send(str(time.time()))
         try:
-            signal = pipe.recv(zmq.NOBLOCK)
+            signal = pipe.recv(zmq.DONTWAIT)
         except zmq.ZMQError as e:
             if e.errno == zmq.EAGAIN:
                 # nothing to recv
@@ -75,7 +75,7 @@ def main():
     ctx = zmq.Context.instance()
     pub_pipe, pub_peer = zpipe(ctx)
     sub_pipe, sub_peer = zpipe(ctx)
-    
+
     pub_thread = threading.Thread(target=publisher, args=(pub_peer,))
     pub_thread.daemon=True
     pub_thread.start()

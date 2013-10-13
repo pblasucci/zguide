@@ -5,8 +5,8 @@ require 'rubygems'
 require 'ffi-rzmq'
 
 context = ZMQ::Context.new
-frontend = context.socket(ZMQ::XREP)
-backend = context.socket(ZMQ::XREQ)
+frontend = context.socket(ZMQ::ROUTER)
+backend = context.socket(ZMQ::DEALER)
 
 frontend.bind('tcp://*:5559')
 backend.bind('tcp://*:5560')
@@ -19,19 +19,11 @@ loop do
   poller.poll(:blocking)
   poller.readables.each do |socket|
     if socket === frontend
-      loop do
-        socket.recv_string(message = '')
-        more = socket.more_parts?
-        backend.send_string(message, more ? ZMQ::SNDMORE : 0)
-        break unless more
-      end
+      socket.recv_strings(messages = [])
+      backend.send_strings(messages)
     elsif socket === backend
-      loop do
-        socket.recv_string(message = '')
-        more = socket.more_parts?
-        frontend.send_string(message, more ? ZMQ::SNDMORE : 0)
-        break unless more
-      end
+      socket.recv_strings(messages = [])
+      frontend.send_strings(messages)
     end
   end
 end

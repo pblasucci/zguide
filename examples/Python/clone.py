@@ -32,46 +32,46 @@ class Clone(object):
     pipe = None     # Pipe through to clone agent
     agent = None    # agent in a thread
     _subtree = None # cache of our subtree value
-    
+
     def __init__(self):
         self.ctx = zmq.Context()
         self.pipe, peer = zpipe(self.ctx)
         self.agent = threading.Thread(target=clone_agent, args=(self.ctx,peer))
         self.agent.daemon = True
         self.agent.start()
-    
+
     # ---------------------------------------------------------------------
     # Clone.subtree is a property, which sets the subtree for snapshot
     # and updates
-    
+
     @property
     def subtree(self):
         return self._subtree
-    
+
     @subtree.setter
     def subtree(self, subtree):
         """Sends [SUBTREE][subtree] to the agent"""
         self._subtree = None
         self.pipe.send_multipart(["SUBTREE", subtree])
-    
+
     def connect(self, address, port):
         """Connect to new server endpoint
         Sends [CONNECT][address][port] to the agent
         """
         self.pipe.send_multipart(["CONNECT", address, str(port)])
-    
+
     def set(self, key, value, ttl=0):
         """Set new value in distributed hash table
         Sends [SET][key][value][ttl] to the agent
         """
         self.pipe.send_multipart(["SET", key, value, str(ttl)])
-    
+
     def get(self, key):
         """Lookup value in distributed hash table
         Sends [GET][key] to the agent and waits for a value response
         If there is no clone available, will eventually return None.
         """
-        
+
         self.pipe.send_multipart(["GET", key])
         try:
             reply = self.pipe.recv_multipart()
@@ -132,7 +132,7 @@ class CloneAgent(object):
         self.kvmap = {}
         self.subtree = ''
         self.state = STATE_INITIAL
-        self.publisher = ctx.socket(zmq.PUB)
+        self.publisher = ctx.socket(zmq.PUSH)
         self.router = ctx.socket(zmq.ROUTER)
         self.servers = []
 
@@ -151,16 +151,17 @@ class CloneAgent(object):
         elif command == "SET":
             key,value,sttl = msg
             ttl = int(sttl)
-            self.kvmap[key] = value
-            
+
             # Send key-value pair on to server
             kvmsg = KVMsg(0, key=key, body=value)
-            kvmsg["ttl"] = ttl
+            kvmsg.store(self.kvmap)
+            if ttl:
+                kvmsg["ttl"] = ttl
             kvmsg.send(self.publisher)
         elif command == "GET":
             key = msg[0]
-            value = self.kvmap.get(key, '')
-            self.pipe.send(value)
+            value = self.kvmap.get(key)
+            self.pipe.send(value.body if value else '')
 
 
 # ---------------------------------------------------------------------
@@ -170,13 +171,13 @@ class CloneAgent(object):
 def clone_agent(ctx, pipe):
     agent = CloneAgent(ctx, pipe)
     server = None
-    
+
     while True:
         poller = zmq.Poller()
         poller.register(agent.pipe, zmq.POLLIN)
         poll_timer = None
         server_socket = None
-        
+
         if agent.state == STATE_INITIAL:
             # In this state we ask the server for a snapshot,
             # if we have a server to talk to...
@@ -198,14 +199,14 @@ def clone_agent(ctx, pipe):
             # In this state we read from subscriber and we expect
             # the server to give hugz, else we fail over.
             server_socket = server.subscriber
-        
+
         if server_socket:
             # we have a second socket to poll:
             poller.register(server_socket, zmq.POLLIN)
-        
+
         if server is not None:
             poll_timer = 1e3 * max(0,server.expiry - time.time())
-        
+
         # ------------------------------------------------------------
         # Poll loop
         try:
@@ -237,7 +238,7 @@ def clone_agent(ctx, pipe):
                     agent.sequence = kvmsg.sequence
                     kvmsg.store(agent.kvmap)
                     action = "update" if kvmsg.body else "delete"
-                    
+
                     logging.info ("I: received from %s:%d %s=%d",
                         server.address, server.port, action, agent.sequence)
         else:
@@ -246,4 +247,3 @@ def clone_agent(ctx, pipe):
                     server.address, server.port)
             agent.cur_server = (agent.cur_server + 1) % len(agent.servers)
             agent.state = STATE_INITIAL
-

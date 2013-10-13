@@ -1,13 +1,12 @@
-//
 //  Hello World client
 //  Connects REQ socket to tcp://localhost:5559
 //  Sends "Hello" to server, expects "World" back
-//
+
 #include "zhelpers.h"
 
 int main (void) 
 {
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
 
     //  Socket to talk to server
     void *requester = zmq_socket (context, ZMQ_REQ);
@@ -21,6 +20,6 @@ int main (void)
         free (string);
     }
     zmq_close (requester);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

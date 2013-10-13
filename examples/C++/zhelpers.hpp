@@ -33,10 +33,13 @@
 #include <string>
 #include <sstream>
 
+#if (!defined(__WINDOWS__))
 #include <sys/time.h>
+#include <unistd.h>
+#include <pthread.h>
+#endif
 #include <time.h>
 #include <assert.h>
-#include <pthread.h>
 #include <stdlib.h>        // random()  RAND_MAX
 #include <stdio.h>
 #include <stdarg.h>
@@ -50,7 +53,11 @@
 #endif
 
 //  Provide random number from 0..(num-1)
+#if (!defined(__WINDOWS__))
 #define within(num) (int) ((float) (num) * random () / (RAND_MAX + 1.0))
+#else
+#define within(num) (int) ((float) (num) * rand () / (RAND_MAX + 1.0))
+#endif
 
 //  Receive 0MQ string from socket and convert into string
 static std::string
@@ -67,9 +74,9 @@ static bool
 s_send (zmq::socket_t & socket, const std::string & string) {
 
     zmq::message_t message(string.size());
-    memcpy(message.data(), string.data(), string.size());
+    memcpy (message.data(), string.data(), string.size());
 
-    bool rc = socket.send(message);
+    bool rc = socket.send (message);
     return (rc);
 }
 
@@ -78,9 +85,9 @@ static bool
 s_sendmore (zmq::socket_t & socket, const std::string & string) {
 
     zmq::message_t message(string.size());
-    memcpy(message.data(), string.data(), string.size());
+    memcpy (message.data(), string.data(), string.size());
 
-    bool rc = socket.send(message, ZMQ_SNDMORE);
+    bool rc = socket.send (message, ZMQ_SNDMORE);
     return (rc);
 }
 
@@ -93,13 +100,12 @@ s_dump (zmq::socket_t & socket)
 
     while (1) {
         //  Process all parts of the message
-
         zmq::message_t message;
         socket.recv(&message);
 
         //  Dump the message as text or binary
-        std::string data(static_cast<char*>(message.data()));
         int size = message.size();
+        std::string data(static_cast<char*>(message.data()), size);
 
         bool is_text = true;
 
@@ -108,39 +114,35 @@ s_dump (zmq::socket_t & socket)
         for (char_nbr = 0; char_nbr < size; char_nbr++) {
             byte = data [char_nbr];
             if (byte < 32 || byte > 127)
-              is_text = false;
+                is_text = false;
         }
-
-        std::cout << std::setfill('0') << std::setw(3) << "[" << size << "]";
-
+        std::cout << "[" << std::setfill('0') << std::setw(3) << size << "]";
         for (char_nbr = 0; char_nbr < size; char_nbr++) {
-            if (is_text) {
+            if (is_text)
                 std::cout << (char)data [char_nbr];
-            } else {
+            else
                 std::cout << std::setfill('0') << std::setw(2)
-                   << std::hex << (unsigned char) data [char_nbr];
-            }
+                   << std::hex << (unsigned int) data [char_nbr];
         }
         std::cout << std::endl;
 
-        int64_t more;           //  Multipart detection
+        int more = 0;           //  Multipart detection
         size_t more_size = sizeof (more);
-        socket.getsockopt(ZMQ_RCVMORE, &more, &more_size);
-
+        socket.getsockopt (ZMQ_RCVMORE, &more, &more_size);
         if (!more)
-            break;      //  Last message part
+            break;              //  Last message part
     }
 }
 
 //  Set simple random printable identity on socket
 //
-std::string
+inline std::string
 s_set_id (zmq::socket_t & socket)
 {
     std::stringstream ss;
     ss << std::hex << std::uppercase
-          << std::setw(4) << std::setfill('0') << within (0x10000) << "-"
-          << std::setw(4) << std::setfill('0') << within (0x10000);
+       << std::setw(4) << std::setfill('0') << within (0x10000) << "-"
+       << std::setw(4) << std::setfill('0') << within (0x10000);
     socket.setsockopt(ZMQ_IDENTITY, ss.str().c_str(), ss.str().length());
     return ss.str();
 }
@@ -203,10 +205,10 @@ s_console (const char *format, ...)
 {
     time_t curtime = time (NULL);
     struct tm *loctime = localtime (&curtime);
-    char *formatted = new char (20);
+    char *formatted = new char[20];
     strftime (formatted, 20, "%y-%m-%d %H:%M:%S ", loctime);
     printf ("%s", formatted);
-    free (formatted);
+    delete[] formatted;
 
     va_list argptr;
     va_start (argptr, format);
@@ -230,12 +232,14 @@ static void s_signal_handler (int signal_value)
 
 static void s_catch_signals ()
 {
+#if (!defined(__WINDOWS__))
     struct sigaction action;
     action.sa_handler = s_signal_handler;
     action.sa_flags = 0;
     sigemptyset (&action.sa_mask);
     sigaction (SIGINT, &action, NULL);
     sigaction (SIGTERM, &action, NULL);
+#endif
 }
 
 #endif

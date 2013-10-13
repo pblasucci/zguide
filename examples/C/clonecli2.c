@@ -1,6 +1,4 @@
-//
-//  Clone client Model Two
-//
+//  Clone client - Model Two
 
 //  Lets us build this source without creating a library
 #include "kvsimple.c"
@@ -12,6 +10,7 @@ int main (void)
     void *snapshot = zsocket_new (ctx, ZMQ_DEALER);
     zsocket_connect (snapshot, "tcp://localhost:5556");
     void *subscriber = zsocket_new (ctx, ZMQ_SUB);
+    zsocket_set_subscribe (subscriber, "");
     zsocket_connect (subscriber, "tcp://localhost:5557");
 
     zhash_t *kvmap = zhash_new ();
@@ -19,7 +18,7 @@ int main (void)
     //  Get state snapshot
     int64_t sequence = 0;
     zstr_send (snapshot, "ICANHAZ?");
-    while (TRUE) {
+    while (true) {
         kvmsg_t *kvmsg = kvmsg_recv (snapshot);
         if (!kvmsg)
             break;          //  Interrupted

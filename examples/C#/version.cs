@@ -6,11 +6,15 @@
 //  Email:      michael.compton@littleedge.co.uk
 
 using System;
-using ZMQ;
+using ZeroMQ;
+using zguide;
 
-namespace ZMQGuide {
-    class Program {
-        static void Main(string[] args) {
+namespace zguide.version
+{
+    internal class Program 
+    {
+        public static void Main(string[] args) 
+        {
             Console.WriteLine(ZHelpers.Version());
         }
     }

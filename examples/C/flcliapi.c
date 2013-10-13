@@ -1,28 +1,5 @@
-/*  =====================================================================
-    flcliapi - Freelance Pattern agent class
-    Model 3: uses ROUTER socket to address specific services
-
-    ---------------------------------------------------------------------
-    Copyright (c) 1991-2011 iMatix Corporation <www.imatix.com>
-    Copyright other contributors as noted in the AUTHORS file.
-
-    This file is part of the ZeroMQ Guide: http://zguide.zeromq.org
-
-    This is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or (at
-    your option) any later version.
-
-    This software is distributed in the hope that it will be useful, but
-    WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this program. If not, see
-    <http://www.gnu.org/licenses/>.
-    =====================================================================
-*/
+//  flcliapi class - Freelance Pattern agent class
+//  Implements the Freelance Protocol at http://rfc.zeromq.org/spec:10
 
 #include "flcliapi.h"
 
@@ -33,12 +10,14 @@
 //  Server considered dead if silent for this long
 #define SERVER_TTL      6000    //  msecs
 
+//  .split API structure
+//  This API works in two halves, a common pattern for APIs that need to
+//  run in the background. One half is an frontend object our application
+//  creates and works with; the other half is a backend "agent" that runs
+//  in a background thread. The frontend talks to the backend over an
+//  inproc pipe socket:
 
-//  =====================================================================
-//  Synchronous part, works in our application thread
-
-//  ---------------------------------------------------------------------
-//  Structure of our class
+//  Structure of our frontend class
 
 struct _flcliapi_t {
     zctx_t *ctx;        //  Our context wrapper
@@ -48,8 +27,6 @@ struct _flcliapi_t {
 //  This is the thread that handles our real flcliapi class
 static void flcliapi_agent (void *args, zctx_t *ctx, void *pipe);
 
-
-//  ---------------------------------------------------------------------
 //  Constructor
 
 flcliapi_t *
@@ -64,7 +41,6 @@ flcliapi_new (void)
     return self;
 }
 
-//  ---------------------------------------------------------------------
 //  Destructor
 
 void
@@ -79,9 +55,12 @@ flcliapi_destroy (flcliapi_t **self_p)
     }
 }
 
-//  ---------------------------------------------------------------------
-//  Connect to new server endpoint
-//  Sends [CONNECT][endpoint] to the agent
+//  .split connect method
+//  To implement the connect method, the frontend object sends a multipart
+//  message to the backend agent. The first part is a string "CONNECT", and
+//  the second part is the endpoint. It waits 100msec for the connection to
+//  come up, which isn't pretty, but saves us from sending all requests to a
+//  single server, at startup time:
 
 void
 flcliapi_connect (flcliapi_t *self, char *endpoint)
@@ -95,8 +74,9 @@ flcliapi_connect (flcliapi_t *self, char *endpoint)
     zclock_sleep (100);      //  Allow connection to come up
 }
 
-//  ---------------------------------------------------------------------
-//  Send & destroy request, get reply
+//  .split request method
+//  To implement the request method, the frontend object sends a message
+//  to the backend, specifying a command "REQUEST" and the request message:
 
 zmsg_t *
 flcliapi_request (flcliapi_t *self, zmsg_t **request_p)
@@ -116,11 +96,12 @@ flcliapi_request (flcliapi_t *self, zmsg_t **request_p)
     return reply;
 }
 
+//  .split backend agent
+//  Here we see the backend agent. It runs as an attached thread, talking
+//  to its parent over a pipe socket. It is a fairly complex piece of work
+//  so we'll break it down into pieces. First, the agent manages a set of
+//  servers, using our familiar class approach:
 
-//  =====================================================================
-//  Asynchronous part, works in the background
-
-//  ---------------------------------------------------------------------
 //  Simple class for one server we talk to
 
 typedef struct {
@@ -154,7 +135,7 @@ server_destroy (server_t **self_p)
 }
 
 int
-server_ping (char *key, void *server, void *socket)
+server_ping (const char *key, void *server, void *socket)
 {
     server_t *self = (server_t *) server;
     if (zclock_time () >= self->ping_at) {
@@ -168,7 +149,7 @@ server_ping (char *key, void *server, void *socket)
 }
 
 int
-server_tickless (char *key, void *server, void *arg)
+server_tickless (const char *key, void *server, void *arg)
 {
     server_t *self = (server_t *) server;
     uint64_t *tickless = (uint64_t *) arg;
@@ -177,8 +158,10 @@ server_tickless (char *key, void *server, void *arg)
     return 0;
 }
 
+//  .split backend agent class
+//  We build the agent as a class that's capable of processing messages
+//  coming in from its various sockets:
 
-//  ---------------------------------------------------------------------
 //  Simple class for one background agent
 
 typedef struct {
@@ -219,6 +202,10 @@ agent_destroy (agent_t **self_p)
         *self_p = NULL;
     }
 }
+
+//  .split control messages
+//  This method processes one message from our frontend class
+//  (it's going to be CONNECT or REQUEST):
 
 //  Callback when we remove server from agent 'servers' hash table
 
@@ -265,6 +252,10 @@ agent_control_message (agent_t *self)
     zmsg_destroy (&msg);
 }
 
+//  .split router messages
+//  This method processes one message from a connected
+//  server:
+
 void
 agent_router_message (agent_t *self)
 {
@@ -294,10 +285,9 @@ agent_router_message (agent_t *self)
         zmsg_destroy (&reply);
 }
 
-
-//  ---------------------------------------------------------------------
-//  Asynchronous agent manages server pool and handles request/reply
-//  dialog when the application asks for it.
+//  .split backend agent implementation
+//  Finally, here's the agent task itself, which polls its two sockets
+//  and processes incoming messages:
 
 static void
 flcliapi_agent (void *args, zctx_t *ctx, void *pipe)

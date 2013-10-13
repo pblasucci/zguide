@@ -1,21 +1,25 @@
-void *mousetrap;
+//  Receive 0MQ string from socket and convert into C string
+static char *
+s_recv (void *socket) {
+    zmq_msg_t message;
+    zmq_msg_init (&message);
+    int size = zmq_msg_recv (&message, socket, 0);
+    if (size == -1)
+        return NULL;
+    char *string = malloc (size + 1);
+    memcpy (string, zmq_msg_data (&message), size);
+    zmq_msg_close (&message);
+    string [size] = 0;
+    return (string);
+}
 
-//  Create socket for catching mice
-mousetrap = zmq_socket (context, ZMQ_PULL);
-
-//  Configure the socket
-int64_t jawsize = 10000;
-zmq_setsockopt (mousetrap, ZMQ_HWM, &jawsize, sizeof jawsize);
-
-//  Plug socket into mouse hole
-zmq_connect (mousetrap, "tcp://192.168.55.221:5001");
-
-//  Wait for juicy mouse to arrive
-zmq_msg_t mouse;
-zmq_msg_init (&mouse);
-zmq_recv (mousetrap, &mouse, 0);
-//  Destroy the mouse
-zmq_msg_close (&mouse);
-
-//  Destroy the socket
-zmq_close (mousetrap);
+//  Convert C string to 0MQ string and send to socket
+static int
+s_send (void *socket, char *string) {
+    zmq_msg_t message;
+    zmq_msg_init_size (&message, strlen (string));
+    memcpy (zmq_msg_data (&message), string, strlen (string));
+    int size = zmq_msg_send (&message, socket, 0);
+    zmq_msg_close (&message);
+    return (size);
+}

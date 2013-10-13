@@ -4,7 +4,16 @@ tmp_*
 node_modules
 *.ipc
 *.pdf
+*.epub
 *.pyc
 *.pyo
 *.o
 .DS_Store
+*~
+ebook.xml
+book
+book.ps
+book.xml
+book.tex
+upload.sh
+changes.txt

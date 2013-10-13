@@ -1,3 +1,6 @@
-zmq_bind (socket, "tcp://*:5555");
-zmq_bind (socket, "tcp://*:9999");
-zmq_bind (socket, "ipc://myserver.ipc");
+typedef struct {
+    void *socket;       //  0MQ socket to poll on
+    int fd;             //  OR, native file handle to poll on
+    short events;       //  Events to poll on
+    short revents;      //  Events returned after poll
+} zmq_pollitem_t;

@@ -104,12 +104,13 @@ public:
          if (message.size() == 17 && ((unsigned char *)message.data())[0] == 0) {
             char *uuidstr = encode_uuid((unsigned char*) message.data());
             push_back(uuidstr);
+            delete[] uuidstr;
          }
          else {
             data[message.size()] = 0;
             push_back((char *)data.c_str());
          }
-         int64_t more;
+         int64_t more = 0;
          size_t more_size = sizeof(more);
          socket.getsockopt(ZMQ_RCVMORE, &more, &more_size);
          if (!more) {
@@ -307,13 +308,13 @@ public:
    test(int verbose)
    {
       zmq::context_t context(1);
-      zmq::socket_t output(context, ZMQ_XREQ);
+      zmq::socket_t output(context, ZMQ_DEALER);
       try {
          output.bind("ipc://zmsg_selftest.ipc");
       } catch (zmq::error_t error) {
          assert(error.num()!=0);
       }
-      zmq::socket_t input(context, ZMQ_XREP);
+      zmq::socket_t input(context, ZMQ_ROUTER);
       try {
          input.connect("ipc://zmsg_selftest.ipc");
       } catch (zmq::error_t error) {

@@ -2,66 +2,70 @@
 //  Simple request-reply broker
 //
 
-//  Author:     Michael Compton
-//  Email:      michael.compton@littleedge.co.uk
+//  Author:     Michael Compton, Tomas Roos
+//  Email:      michael.compton@littleedge.co.uk, ptomasroos@gmail.com
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
-using ZMQ;
+using ZeroMQ;
+using ZeroMQ.Interop;
 
-namespace ZMQGuide {
-    public class RRBroker {
-        private Context context;
-        private Socket backend;
-        private Socket frontend;
+namespace zguide.rrbroker
+{
+    internal class Program
+    {
+        public static void Main(string[] args)
+        {
+            using (var context = ZmqContext.Create())
+            {
+                using (ZmqSocket frontend = context.CreateSocket(SocketType.ROUTER), backend = context.CreateSocket(SocketType.DEALER))
+                {
+                    frontend.Bind("tcp://*:5559");
+                    backend.Bind("tcp://*:5560");
 
-        public RRBroker() {
-            //  Prepare our context and sockets
-            context = new Context(1);
-            frontend = context.Socket(SocketType.XREP);
-            backend = context.Socket(SocketType.XREQ);
-            frontend.Bind("tcp://*:5559");
-            backend.Bind("tcp://*:5560");
-        }
+                    frontend.ReceiveReady += (sender, e) => FrontendPollInHandler(e.Socket, backend);
+                    backend.ReceiveReady += (sender, e) => BackendPollInHandler(e.Socket, backend);
 
-        public void Broker() {
-            //  Initialize poll set
-            PollItem[] pollItems = new PollItem[2];
-            pollItems[0] = frontend.CreatePollItem(IOMultiPlex.POLLIN);
-            pollItems[0].PollInHandler += new PollHandler(FrontendPollInHandler);
-            pollItems[1] = backend.CreatePollItem(IOMultiPlex.POLLIN);
-            pollItems[1].PollInHandler += new PollHandler(BackendPollInHandler);
-            //  Switch messages between sockets
-            while (true) {
-                context.Poll(pollItems, -1);
+                    var poller = new Poller(new List<ZmqSocket> { frontend, backend });
+
+                    while (true)
+                    {
+                        poller.Poll();
+                    }
+                }
             }
         }
 
-        private void FrontendPollInHandler(Socket socket, IOMultiPlex revents) {
-            //  Process all parts of the message
-            bool isProcessing = true;
-            while (isProcessing) {
-                byte[] message = socket.Recv();
-                backend.Send(message, socket.RcvMore ? SendRecvOpt.SNDMORE : 0);
-                isProcessing = socket.RcvMore;
-            }
+        private static void FrontendPollInHandler(ZmqSocket frontend, ZmqSocket backend)
+        {
+            RelayMessage(frontend, backend);
         }
 
-        private void BackendPollInHandler(Socket socket, IOMultiPlex revents) {
-            //  Process all parts of the message
-            bool isProcessing = true;
-            while (isProcessing) {
-                byte[] message = socket.Recv();
-                frontend.Send(message, socket.RcvMore ? SendRecvOpt.SNDMORE : 0);
-                isProcessing = socket.RcvMore;
-            }
+        private static void BackendPollInHandler(ZmqSocket backend, ZmqSocket frontend)
+        {
+            RelayMessage(backend, frontend);
         }
-    }
 
-    class Program {
-        static void Main(string[] args) {
-            RRBroker broker = new RRBroker();
-            broker.Broker();
+        private static void RelayMessage(ZmqSocket source, ZmqSocket destination)
+        {
+            bool hasMore = true;
+            while (hasMore)
+            {
+                // side effect warning!
+                // note! that this uses Receive mode that gets a byte[], the router c# implementation 
+                // doesnt work if you get a string message instead of the byte[] i would prefer the solution thats commented.
+                // but the router doesnt seem to be able to handle the response back to the client
+                //string message = source.Receive(Encoding.Unicode);
+                //hasMore = source.RcvMore;
+                //destination.Send(message, Encoding.Unicode, hasMore ? SendRecvOpt.SNDMORE : SendRecvOpt.NONE);
+
+                byte[] message = new byte[0];
+                source.Receive(message);
+                hasMore = source.ReceiveMore;
+                destination.Send(message, message.Length, hasMore ? SocketFlags.SendMore : SocketFlags.None);
+            }
         }
     }
 }

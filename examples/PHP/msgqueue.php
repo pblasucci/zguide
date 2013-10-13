@@ -9,14 +9,14 @@
 $context = new ZMQContext();
 
 //  Socket facing clients
-$frontend = $context->getSocket(ZMQ::SOCKET_XREP);
+$frontend = $context->getSocket(ZMQ::SOCKET_ROUTER);
 $frontend->bind("tcp://*:5559");
 
 //  Socket facing services
-$backend = $context->getSocket(ZMQ::SOCKET_XREQ);
+$backend = $context->getSocket(ZMQ::SOCKET_DEALER);
 $backend->bind("tcp://*:5560");
 
 //  Start built-in device
-new ZMQDevice(ZMQ::DEVICE_QUEUE, $frontend, $backend);
+new ZMQDevice($frontend, $backend);
 
 //  We never get here...

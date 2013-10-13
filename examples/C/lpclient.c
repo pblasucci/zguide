@@ -1,10 +1,8 @@
-//
 //  Lazy Pirate client
 //  Use zmq_poll to do a safe request-reply
 //  To run, start lpserver and then randomly kill/restart it
-//
-#include "czmq.h"
 
+#include "czmq.h"
 #define REQUEST_TIMEOUT     2500    //  msecs, (> 1000!)
 #define REQUEST_RETRIES     3       //  Before we abandon
 #define SERVER_ENDPOINT     "tcp://localhost:5555"
@@ -33,7 +31,12 @@ int main (void)
             if (rc == -1)
                 break;          //  Interrupted
 
-            //  If we got a reply, process it
+            //  .split process server reply
+            //  Here we process a server reply and exit our loop if the
+            //  reply is valid. If we didn't a reply we close the client
+            //  socket and resend the request. We try a number of times
+            //  before finally abandoning:
+            
             if (items [0].revents & ZMQ_POLLIN) {
                 //  We got a reply from the server, must match sequence
                 char *reply = zstr_recv (client);

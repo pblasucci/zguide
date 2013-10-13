@@ -1,12 +1,11 @@
-//
 //  Simple request-reply broker
-//
+
 #include "zhelpers.h"
 
 int main (void) 
 {
     //  Prepare our context and sockets
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
     void *frontend = zmq_socket (context, ZMQ_ROUTER);
     void *backend  = zmq_socket (context, ZMQ_DEALER);
     zmq_bind (frontend, "tcp://*:5559");
@@ -20,17 +19,14 @@ int main (void)
     //  Switch messages between sockets
     while (1) {
         zmq_msg_t message;
-        int64_t more;           //  Multipart detection
-
         zmq_poll (items, 2, -1);
         if (items [0].revents & ZMQ_POLLIN) {
             while (1) {
                 //  Process all parts of the message
                 zmq_msg_init (&message);
-                zmq_recv (frontend, &message, 0);
-                size_t more_size = sizeof (more);
-                zmq_getsockopt (frontend, ZMQ_RCVMORE, &more, &more_size);
-                zmq_send (backend, &message, more? ZMQ_SNDMORE: 0);
+                zmq_msg_recv (&message, frontend, 0);
+                int more = zmq_msg_more (&message);
+                zmq_msg_send (&message, backend, more? ZMQ_SNDMORE: 0);
                 zmq_msg_close (&message);
                 if (!more)
                     break;      //  Last message part
@@ -40,19 +36,18 @@ int main (void)
             while (1) {
                 //  Process all parts of the message
                 zmq_msg_init (&message);
-                zmq_recv (backend, &message, 0);
-                size_t more_size = sizeof (more);
-                zmq_getsockopt (backend, ZMQ_RCVMORE, &more, &more_size);
-                zmq_send (frontend, &message, more? ZMQ_SNDMORE: 0);
+                zmq_msg_recv (&message, backend, 0);
+                int more = zmq_msg_more (&message);
+                zmq_msg_send (&message, frontend, more? ZMQ_SNDMORE: 0);
                 zmq_msg_close (&message);
                 if (!more)
                     break;      //  Last message part
             }
         }
     }
-    //  We never get here but clean up anyhow
+    //  We never get here, but clean up anyhow
     zmq_close (frontend);
     zmq_close (backend);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

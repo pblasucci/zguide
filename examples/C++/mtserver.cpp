@@ -38,9 +38,9 @@ int main ()
 {
     //  Prepare our context and sockets
     zmq::context_t context (1);
-    zmq::socket_t clients (context, ZMQ_XREP);
+    zmq::socket_t clients (context, ZMQ_ROUTER);
     clients.bind ("tcp://*:5555");
-    zmq::socket_t workers (context, ZMQ_XREQ);
+    zmq::socket_t workers (context, ZMQ_DEALER);
     workers.bind ("inproc://workers");
 
     //  Launch pool of worker threads
@@ -49,7 +49,7 @@ int main ()
         pthread_create (&worker, NULL, worker_routine, (void *) &context);
     }
     //  Connect work threads to client threads via a queue
-    zmq::device (ZMQ_QUEUE, clients, workers);
+    zmq::proxy (clients, workers, NULL);
     return 0;
 }
     

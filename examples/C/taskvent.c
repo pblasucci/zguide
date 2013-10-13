@@ -1,13 +1,12 @@
-//
 //  Task ventilator
 //  Binds PUSH socket to tcp://localhost:5557
 //  Sends batch of tasks to workers via that socket
-//
+
 #include "zhelpers.h"
 
 int main (void) 
 {
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
 
     //  Socket to send messages on
     void *sender = zmq_socket (context, ZMQ_PUSH);
@@ -40,10 +39,9 @@ int main (void)
         s_send (sender, string);
     }
     printf ("Total expected cost: %d msec\n", total_msec);
-    sleep (1);              //  Give 0MQ time to deliver
 
     zmq_close (sink);
     zmq_close (sender);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

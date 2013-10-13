@@ -4,33 +4,38 @@
 //  Expects "Hello" from client, replies with "World"
 //
 
-//  Author:     Michael Compton
-//  Email:      michael.compton@littleedge.co.uk
+//  Author:     Michael Compton, Tomas Roos
+//  Email:      michael.compton@littleedge.co.uk, ptomasroos@gmail.com
 
 using System;
 using System.Text;
 using System.Threading;
-using ZMQ;
+using ZeroMQ;
 
-namespace ZMQGuide {
-    class Program {
-        static void Main(string[] args) {
-            // ZMQ Context
-            using (Context context = new Context(1)) {
-                // Socket to talk to clients
-                using (Socket socket = context.Socket(SocketType.REP)) {
-                    socket.Bind("tcp://*:5555");
-                    
-                    while (true) {
-                        // Wait for next request from client
-                        string message = socket.Recv(Encoding.Unicode);
+namespace zguide.hwserver
+{
+    internal class Program
+    {
+        public static void Main(string[] args)
+        {
+            using (var context = ZmqContext.Create())
+            {
+                using (ZmqSocket replyer = context.CreateSocket(SocketType.REP))
+                {
+                    replyer.Bind("tcp://*:5555");
+
+                    const string replyMessage = "World";
+
+                    while (true)
+                    {
+                        string message = replyer.Receive(Encoding.Unicode);
                         Console.WriteLine("Received request: {0}", message);
 
-                        // Do Some 'work'
+                        // Simulate work, by sleeping
                         Thread.Sleep(1000);
 
                         // Send reply back to client
-                        socket.Send("World", Encoding.Unicode);
+                        replyer.Send(replyMessage, Encoding.Unicode);
                     }
                 }
             }

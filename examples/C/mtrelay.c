@@ -1,6 +1,5 @@
-//
 //  Multithreaded relay
-//
+
 #include "zhelpers.h"
 #include <pthread.h>
 
@@ -41,7 +40,7 @@ step2 (void *context) {
 
 int main (void)
 {
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
 
     //  Bind inproc socket before starting step2
     void *receiver = zmq_socket (context, ZMQ_PAIR);
@@ -55,6 +54,6 @@ int main (void)
     zmq_close (receiver);
 
     printf ("Test successful!\n");
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

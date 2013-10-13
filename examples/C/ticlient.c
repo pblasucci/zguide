@@ -1,12 +1,11 @@
-//
 //  Titanic client example
 //  Implements client side of http://rfc.zeromq.org/spec:9
 
-//  Lets us build this source without creating a library
+//  Lets build this source without creating a library
 #include "mdcliapi.c"
 
 //  Calls a TSP service
-//  Returns reponse if successful (status code 200 OK), else NULL
+//  Returns response if successful (status code 200 OK), else NULL
 //
 static zmsg_t *
 s_service_call (mdcli_t *session, char *service, zmsg_t **request_p)
@@ -33,8 +32,11 @@ s_service_call (mdcli_t *session, char *service, zmsg_t **request_p)
         exit (EXIT_SUCCESS);    //  Interrupted or failed
 
     zmsg_destroy (&reply);
-    return NULL;        //  Didn't succeed, don't care why not
+    return NULL;        //  Didn't succeed; don't care why not
 }
+
+//  .split main task
+//  The main task tests our service call by sending an echo request:
 
 int main (int argc, char *argv [])
 {
@@ -54,7 +56,6 @@ int main (int argc, char *argv [])
         zmsg_destroy (&reply);
         zframe_print (uuid, "I: request UUID ");
     }
-
     //  2. Wait until we get a reply
     while (!zctx_interrupted) {
         zclock_sleep (100);

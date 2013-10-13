@@ -1,17 +1,18 @@
-//
 //  Synchronized publisher
-//
-#include "zhelpers.h"
 
-//  We wait for 10 subscribers
-#define SUBSCRIBERS_EXPECTED  10
+#include "zhelpers.h"
+#define SUBSCRIBERS_EXPECTED  10  //  We wait for 10 subscribers 
 
 int main (void)
 {
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
 
     //  Socket to talk to clients
     void *publisher = zmq_socket (context, ZMQ_PUB);
+
+    int sndhwm = 1100000;
+    zmq_setsockopt (publisher, ZMQ_SNDHWM, &sndhwm, sizeof (int));
+
     zmq_bind (publisher, "tcp://*:5561");
 
     //  Socket to receive signals
@@ -39,6 +40,6 @@ int main (void)
 
     zmq_close (publisher);
     zmq_close (syncservice);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

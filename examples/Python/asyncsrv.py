@@ -10,10 +10,10 @@ class ClientTask(threading.Thread):
     """ClientTask"""
     def __init__(self):
         threading.Thread.__init__ (self)
-    
+
     def run(self):
         context = zmq.Context()
-        socket = context.socket(zmq.XREQ)
+        socket = context.socket(zmq.DEALER)
         identity = 'worker-%d' % (choice([0,1,2,3,4,5,6,7,8,9]))
         socket.setsockopt(zmq.IDENTITY, identity )
         socket.connect('tcp://localhost:5570')
@@ -32,7 +32,7 @@ class ClientTask(threading.Thread):
             reqs = reqs + 1
             print 'Req #%d sent..' % (reqs)
             socket.send('request #%d' % (reqs))
-        
+
         socket.close()
         context.term()
 
@@ -40,25 +40,25 @@ class ServerTask(threading.Thread):
     """ServerTask"""
     def __init__(self):
         threading.Thread.__init__ (self)
-    
+
     def run(self):
         context = zmq.Context()
-        frontend = context.socket(zmq.XREP)
+        frontend = context.socket(zmq.ROUTER)
         frontend.bind('tcp://*:5570')
-        
-        backend = context.socket(zmq.XREQ)
+
+        backend = context.socket(zmq.DEALER)
         backend.bind('inproc://backend')
-        
+
         workers = []
         for i in xrange(5):
             worker = ServerWorker(context)
             worker.start()
             workers.append(worker)
-        
+
         poll = zmq.Poller()
         poll.register(frontend, zmq.POLLIN)
         poll.register(backend,  zmq.POLLIN)
-        
+
         while True:
             sockets = dict(poll.poll())
             if frontend in sockets:
@@ -75,7 +75,7 @@ class ServerTask(threading.Thread):
                     print 'Sending to frontend %s id %s\n' % (msg, _id)
                     frontend.send(_id, zmq.SNDMORE)
                     frontend.send(msg)
-        
+
         frontend.close()
         backend.close()
         context.term()
@@ -85,9 +85,9 @@ class ServerWorker(threading.Thread):
     def __init__(self, context):
         threading.Thread.__init__ (self)
         self.context = context
-    
+
     def run(self):
-        worker = self.context.socket(zmq.XREQ)
+        worker = self.context.socket(zmq.DEALER)
         worker.connect('inproc://backend')
         print 'Worker started'
         while True:
@@ -99,9 +99,9 @@ class ServerWorker(threading.Thread):
                 time.sleep(1/choice(range(1,10)))
                 worker.send(_id, zmq.SNDMORE)
                 worker.send(msg)
-            
+
             del msg
-        
+
         worker.close()
 
 
@@ -112,7 +112,7 @@ def main():
     for i in xrange(3):
         client = ClientTask()
         client.start()
-    
+
     server.join()
 
 

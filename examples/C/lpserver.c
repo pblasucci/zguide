@@ -1,17 +1,16 @@
-//
 //  Lazy Pirate server
 //  Binds REQ socket to tcp://*:5555
 //  Like hwserver except:
 //   - echoes request as-is
 //   - randomly runs slowly, or exits to simulate a crash.
-//
+
 #include "zhelpers.h"
 
 int main (void)
 {
     srandom ((unsigned) time (NULL));
 
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
     void *server = zmq_socket (context, ZMQ_REP);
     zmq_bind (server, "tcp://*:5555");
 
@@ -36,6 +35,6 @@ int main (void)
         free (request);
     }
     zmq_close (server);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

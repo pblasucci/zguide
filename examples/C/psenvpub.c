@@ -1,13 +1,12 @@
-//
 //  Pubsub envelope publisher
 //  Note that the zhelpers.h file also provides s_sendmore
-//
+
 #include "zhelpers.h"
 
 int main (void)
 {
     //  Prepare our context and publisher
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
     void *publisher = zmq_socket (context, ZMQ_PUB);
     zmq_bind (publisher, "tcp://*:5563");
 
@@ -19,8 +18,8 @@ int main (void)
         s_send (publisher, "We would like to see this");
         sleep (1);
     }
-    //  We never get here but clean up anyhow
+    //  We never get here, but clean up anyhow
     zmq_close (publisher);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

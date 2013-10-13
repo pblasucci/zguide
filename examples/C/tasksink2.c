@@ -1,14 +1,12 @@
-//
 //  Task sink - design 2
 //  Adds pub-sub flow to send kill signal to workers
-//
+
 #include "zhelpers.h"
 
 int main (void) 
 {
-    void *context = zmq_init (1);
-
     //  Socket to receive messages on
+    void *context = zmq_ctx_new ();
     void *receiver = zmq_socket (context, ZMQ_PULL);
     zmq_bind (receiver, "tcp://*:5558");
 
@@ -19,7 +17,7 @@ int main (void)
     //  Wait for start of batch
     char *string = s_recv (receiver);
     free (string);
-
+    
     //  Start our clock now
     int64_t start_time = s_clock ();
 
@@ -40,11 +38,8 @@ int main (void)
     //  Send kill signal to workers
     s_send (controller, "KILL");
 
-    //  Finished
-    sleep (1);              //  Give 0MQ time to deliver
-
     zmq_close (receiver);
     zmq_close (controller);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

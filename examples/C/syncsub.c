@@ -1,11 +1,10 @@
-//
 //  Synchronized subscriber
-//
+
 #include "zhelpers.h"
 
 int main (void)
 {
-    void *context = zmq_init (1);
+    void *context = zmq_ctx_new ();
 
     //  First, connect our subscriber socket
     void *subscriber = zmq_socket (context, ZMQ_SUB);
@@ -41,6 +40,6 @@ int main (void)
 
     zmq_close (subscriber);
     zmq_close (syncclient);
-    zmq_term (context);
+    zmq_ctx_destroy (context);
     return 0;
 }

@@ -1,11 +1,9 @@
-//
-//  Clone server Model Two
-//
+//  Clone server - Model Two
 
 //  Lets us build this source without creating a library
 #include "kvsimple.c"
 
-static int s_send_single (char *key, void *data, void *args);
+static int s_send_single (const char *key, void *data, void *args);
 static void state_manager (void *args, zctx_t *ctx, void *pipe);
 
 int main (void)
@@ -45,7 +43,7 @@ typedef struct {
 //  Send one state snapshot key-value pair to a socket
 //  Hash item data is our kvmsg object, ready to send
 static int
-s_send_single (char *key, void *data, void *args)
+s_send_single (const char *key, void *data, void *args)
 {
     kvroute_t *kvroute = (kvroute_t *) args;
     //  Send identity of recipient first
@@ -56,9 +54,10 @@ s_send_single (char *key, void *data, void *args)
     return 0;
 }
 
-//  This thread maintains the state and handles requests from
-//  clients for snapshots.
-//
+//  .split state manager
+//  The state manager task maintains the state and handles requests from
+//  clients for snapshots:
+
 static void
 state_manager (void *args, zctx_t *ctx, void *pipe)
 {

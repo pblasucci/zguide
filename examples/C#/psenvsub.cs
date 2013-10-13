@@ -2,28 +2,30 @@
 //  Pubsub envelope subscriber
 //
 
-//  Author:     Michael Compton
-//  Email:      michael.compton@littleedge.co.uk
+//  Author:     Michael Compton, Tomas Roos
+//  Email:      michael.compton@littleedge.co.uk, ptomasroos@gmail.com
 
 using System;
 using System.Text;
-using System.Threading;
-using ZMQ;
+using ZeroMQ;
 
-namespace ZMQGuide {
-    class Program {
-        static void Main(string[] args) {
-            //  Prepare our context and subscriber  
-            using (Context context = new Context(1)) {
-                using (Socket subscriber = context.Socket(SocketType.SUB)) {
+namespace zguide.psenvsub
+{
+    internal class Program
+    {
+        public static void Main(string[] args)
+        {
+            using (var context = ZmqContext.Create())
+            {
+                using (ZmqSocket subscriber = context.CreateSocket(SocketType.SUB))
+                {
                     subscriber.Connect("tcp://localhost:5563");
-                    subscriber.Subscribe("B", Encoding.Unicode);
+                    subscriber.Subscribe(Encoding.Unicode.GetBytes("B"));
 
-                    while (true) {
-                        //  Read envelope with address
-                        string address = subscriber.Recv(Encoding.Unicode);
-                        //  Read message contents
-                        string contents = subscriber.Recv(Encoding.Unicode);
+                    while (true)
+                    {
+                        string address = subscriber.Receive(Encoding.Unicode);
+                        string contents = subscriber.Receive(Encoding.Unicode);
                         Console.WriteLine("{0} : {1}", address, contents);
                     }
                 }

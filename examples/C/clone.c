@@ -1,42 +1,12 @@
-/*  =====================================================================
-    clone - client-side Clone Pattern class
-
-    ---------------------------------------------------------------------
-    Copyright (c) 1991-2011 iMatix Corporation <www.imatix.com>
-    Copyright other contributors as noted in the AUTHORS file.
-
-    This file is part of the ZeroMQ Guide: http://zguide.zeromq.org
-
-    This is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or (at
-    your option) any later version.
-
-    This software is distributed in the hope that it will be useful, but
-    WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this program. If not, see
-    <http://www.gnu.org/licenses/>.
-    =====================================================================
-*/
+//  clone class - Clone client API stack (multithreaded)
 
 #include "clone.h"
-
 //  If no server replies within this time, abandon request
 #define GLOBAL_TIMEOUT  4000    //  msecs
-//  Server considered dead if silent for this long
-#define SERVER_TTL      5000    //  msecs
-//  Number of servers we will talk to
-#define SERVER_MAX      2
-
 
 //  =====================================================================
 //  Synchronous part, works in our application thread
 
-//  ---------------------------------------------------------------------
 //  Structure of our class
 
 struct _clone_t {
@@ -47,9 +17,10 @@ struct _clone_t {
 //  This is the thread that handles our real clone class
 static void clone_agent (void *args, zctx_t *ctx, void *pipe);
 
-
-//  ---------------------------------------------------------------------
-//  Constructor
+//  .split constructor and destructor
+//  Here are the constructor and destructor for the clone class. Note that
+//  we create a context specifically for the pipe that connects our
+//  frontend to the backend agent:
 
 clone_t *
 clone_new (void)
@@ -63,9 +34,6 @@ clone_new (void)
     return self;
 }
 
-//  ---------------------------------------------------------------------
-//  Destructor
-
 void
 clone_destroy (clone_t **self_p)
 {
@@ -78,9 +46,11 @@ clone_destroy (clone_t **self_p)
     }
 }
 
-//  ---------------------------------------------------------------------
-//  Specify subtree for snapshot and updates, do before connect
-//  Sends [SUBTREE][subtree] to the agent
+//  .split subtree method
+//  Specify subtree for snapshot and updates, which we must do before
+//  connecting to a server as the subtree specification is sent as the
+//  first command to the server. Sends a [SUBTREE][subtree] command to
+//  the agent:
 
 void clone_subtree (clone_t *self, char *subtree)
 {
@@ -91,9 +61,9 @@ void clone_subtree (clone_t *self, char *subtree)
     zmsg_send (&msg, self->pipe);
 }
 
-//  ---------------------------------------------------------------------
-//  Connect to new server endpoint
-//  Sends [CONNECT][endpoint][service] to the agent
+//  .split connect method
+//  Connect to a new server endpoint. We can connect to at most two
+//  servers. Sends [CONNECT][endpoint][service] to the agent:
 
 void
 clone_connect (clone_t *self, char *address, char *service)
@@ -106,9 +76,9 @@ clone_connect (clone_t *self, char *address, char *service)
     zmsg_send (&msg, self->pipe);
 }
 
-//  ---------------------------------------------------------------------
-//  Set new value in distributed hash table
-//  Sends [SET][key][value][ttl] to the agent
+//  .split set method
+//  Set a new value in the shared hashmap. Sends a [SET][key][value][ttl]
+//  command through to the agent which does the actual work:
 
 void
 clone_set (clone_t *self, char *key, char *value, int ttl)
@@ -125,10 +95,10 @@ clone_set (clone_t *self, char *key, char *value, int ttl)
     zmsg_send (&msg, self->pipe);
 }
 
-//  ---------------------------------------------------------------------
-//  Lookup value in distributed hash table
-//  Sends [GET][key] to the agent and waits for a value response
-//  If there is no clone available, will eventually return NULL.
+//  .split get method
+//  Look up value in distributed hash table. Sends [GET][key] to the agent and
+//  waits for a value response. If there is no value available, will eventually
+//  return NULL:
 
 char *
 clone_get (clone_t *self, char *key)
@@ -149,12 +119,9 @@ clone_get (clone_t *self, char *key)
     return NULL;
 }
 
-
-//  =====================================================================
-//  Asynchronous part, works in the background
-
-//  ---------------------------------------------------------------------
-//  Simple class for one server we talk to
+//  .split working with servers
+//  The backend agent manages a set of servers, which we implement using
+//  our simple class model:
 
 typedef struct {
     char *address;              //  Server address
@@ -178,7 +145,8 @@ server_new (zctx_t *ctx, char *address, int port, char *subtree)
     zsocket_connect (self->snapshot, "%s:%d", address, port);
     self->subscriber = zsocket_new (ctx, ZMQ_SUB);
     zsocket_connect (self->subscriber, "%s:%d", address, port + 1);
-    zsockopt_set_subscribe (self->subscriber, subtree);
+    zsocket_set_subscribe (self->subscriber, subtree);
+    zsocket_set_subscribe (self->subscriber, "HUGZ");
     return self;
 }
 
@@ -194,8 +162,14 @@ server_destroy (server_t **self_p)
     }
 }
 
-//  ---------------------------------------------------------------------
-//  Our agent class
+//  .split backend agent class
+//  Here is the implementation of the backend agent itself:
+
+//  Number of servers to which we will talk to
+#define SERVER_MAX      2
+
+//  Server considered dead if silent for this long
+#define SERVER_TTL      5000    //  msecs
 
 //  States we can be in
 #define STATE_INITIAL       0   //  Before asking server for state
@@ -244,14 +218,17 @@ agent_destroy (agent_t **self_p)
     }
 }
 
-//  Returns -1 if thread was interrupted
+//  .split handling a control message
+//  Here we handle the different control messages from the frontend;
+//  SUBTREE, CONNECT, SET, and GET:
+
 static int
 agent_control_message (agent_t *self)
 {
     zmsg_t *msg = zmsg_recv (self->pipe);
     char *command = zmsg_popstr (msg);
     if (command == NULL)
-        return -1;
+        return -1;      //  Interrupted
 
     if (streq (command, "SUBTREE")) {
         free (self->subtree);
@@ -274,6 +251,9 @@ agent_control_message (agent_t *self)
         free (service);
     }
     else
+    //  .split set and get commands
+    //  When we set a property, we push the new key-value pair onto
+    //  all our connected servers:
     if (streq (command, "SET")) {
         char *key = zmsg_popstr (msg);
         char *value = zmsg_popstr (msg);
@@ -289,7 +269,6 @@ agent_control_message (agent_t *self)
         kvmsg_set_prop (kvmsg, "ttl", ttl);
         kvmsg_send     (kvmsg, self->publisher);
         kvmsg_destroy (&kvmsg);
-puts (key);
         free (ttl);
         free (key);             //  Value is owned by hash table
     }
@@ -309,17 +288,16 @@ puts (key);
     return 0;
 }
 
-
-//  ---------------------------------------------------------------------
-//  Asynchronous agent manages server pool and handles request/reply
-//  dialog when the application asks for it.
+//  .split backend agent
+//  The asynchronous agent manages a server pool and handles the
+//  request-reply dialog when the application asks for it:
 
 static void
 clone_agent (void *args, zctx_t *ctx, void *pipe)
 {
     agent_t *self = agent_new (ctx, pipe);
 
-    while (TRUE) {
+    while (true) {
         zmq_pollitem_t poll_set [] = {
             { pipe, 0, ZMQ_POLLIN, 0 },
             { 0,    0, ZMQ_POLLIN, 0 }
@@ -346,14 +324,16 @@ clone_agent (void *args, zctx_t *ctx, void *pipe)
                 else
                     poll_size = 1;
                 break;
+                
             case STATE_SYNCING:
                 //  In this state we read from snapshot and we expect
                 //  the server to respond, else we fail over.
                 poll_set [1].socket = server->snapshot;
                 break;
+                
             case STATE_ACTIVE:
                 //  In this state we read from subscriber and we expect
-                //  the server to give hugz, else we fail over.
+                //  the server to give HUGZ, else we fail over.
                 poll_set [1].socket = server->subscriber;
                 break;
         }
@@ -363,8 +343,11 @@ clone_agent (void *args, zctx_t *ctx, void *pipe)
             if (poll_timer < 0)
                 poll_timer = 0;
         }
-        //  ------------------------------------------------------------
-        //  Poll loop
+        //  .split client poll loop
+        //  We're ready to process incoming messages; if nothing at all
+        //  comes from our server within the timeout, that means the
+        //  server is dead:
+        
         int rc = zmq_poll (poll_set, poll_size, poll_timer);
         if (rc == -1)
             break;              //  Context has been shut down
@@ -397,7 +380,7 @@ clone_agent (void *args, zctx_t *ctx, void *pipe)
             }
             else
             if (self->state == STATE_ACTIVE) {
-                //  Discard out-of-sequence updates, incl. hugz
+                //  Discard out-of-sequence updates, incl. HUGZ
                 if (kvmsg_sequence (kvmsg) > self->sequence) {
                     self->sequence = kvmsg_sequence (kvmsg);
                     kvmsg_store (&kvmsg, self->kvmap);
@@ -411,7 +394,7 @@ clone_agent (void *args, zctx_t *ctx, void *pipe)
         }
         else {
             //  Server has died, failover to next
-            zclock_log ("I: server at %s:%d didn't give hugz",
+            zclock_log ("I: server at %s:%d didn't give HUGZ",
                     server->address, server->port);
             self->cur_server = (self->cur_server + 1) % self->nbr_servers;
             self->state = STATE_INITIAL;

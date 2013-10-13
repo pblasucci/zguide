@@ -1,7 +1,5 @@
-//
 //  Majordomo Protocol worker example
 //  Uses the mdwrk API to hide all MDP aspects
-//
 
 //  Lets us build this source without creating a library
 #include "mdwrkapi.c"
@@ -13,7 +11,7 @@ int main (int argc, char *argv [])
         "tcp://localhost:5555", "echo", verbose);
 
     zmsg_t *reply = NULL;
-    while (1) {
+    while (true) {
         zmsg_t *request = mdwrk_recv (session, &reply);
         if (request == NULL)
             break;              //  Worker was interrupted

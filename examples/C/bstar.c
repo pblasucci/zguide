@@ -1,27 +1,4 @@
-/*  =====================================================================
-    bstar - Binary Star reactor
-
-    ---------------------------------------------------------------------
-    Copyright (c) 1991-2011 iMatix Corporation <www.imatix.com>
-    Copyright other contributors as noted in the AUTHORS file.
-
-    This file is part of the ZeroMQ Guide: http://zguide.zeromq.org
-
-    This is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or (at
-    your option) any later version.
-
-    This software is distributed in the hope that it will be useful, but
-    WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this program. If not, see
-    <http://www.gnu.org/licenses/>.
-    =====================================================================
-*/
+//  bstar class - Binary Star reactor
 
 #include "bstar.h"
 
@@ -42,11 +19,6 @@ typedef enum {
     CLIENT_REQUEST = 5          //  Client makes request
 } event_t;
 
-
-//  We send state information every this often
-//  If peer doesn't respond in two heartbeats, it is 'dead'
-#define BSTAR_HEARTBEAT     1000        //  In msecs
-
 //  Structure of our class
 
 struct _bstar_t {
@@ -59,14 +31,20 @@ struct _bstar_t {
     int64_t peer_expiry;        //  When peer is considered 'dead'
     zloop_fn *voter_fn;         //  Voting socket handler
     void *voter_arg;            //  Arguments for voting handler
-    zloop_fn *master_fn;        //  Call when become master
-    void *master_arg;           //  Arguments for handler
-    zloop_fn *slave_fn;         //  Call when become slave
-    void *slave_arg;            //  Arguments for handler
+    zloop_fn *active_fn;        //  Call when become active
+    void *active_arg;           //  Arguments for handler
+    zloop_fn *passive_fn;         //  Call when become passive
+    void *passive_arg;            //  Arguments for handler
 };
 
+//  The finite-state machine is the same as in the proof-of-concept server.
+//  To understand this reactor in detail, first read the CZMQ zloop class.
+//  .skip
 
-//  ---------------------------------------------------------------------
+//  We send state information every this often
+//  If peer doesn't respond in two heartbeats, it is 'dead'
+#define BSTAR_HEARTBEAT     1000        //  In msecs
+
 //  Binary Star finite state machine (applies event to state)
 //  Returns -1 if there was an exception, 0 if event was valid.
 
@@ -78,24 +56,33 @@ s_execute_fsm (bstar_t *self)
     //  Accepts CLIENT_REQUEST events in this state
     if (self->state == STATE_PRIMARY) {
         if (self->event == PEER_BACKUP) {
-            zclock_log ("I: connected to backup (slave), ready as master");
+            zclock_log ("I: connected to backup (passive), ready as active");
             self->state = STATE_ACTIVE;
-            if (self->master_fn)
-                (self->master_fn) (self->loop, NULL, self->master_arg);
+            if (self->active_fn)
+                (self->active_fn) (self->loop, NULL, self->active_arg);
         }
         else
         if (self->event == PEER_ACTIVE) {
-            zclock_log ("I: connected to backup (master), ready as slave");
+            zclock_log ("I: connected to backup (active), ready as passive");
             self->state = STATE_PASSIVE;
-            if (self->slave_fn)
-                (self->slave_fn) (self->loop, NULL, self->slave_arg);
+            if (self->passive_fn)
+                (self->passive_fn) (self->loop, NULL, self->passive_arg);
         }
         else
         if (self->event == CLIENT_REQUEST) {
-            zclock_log ("I: request from client, ready as master");
-            self->state = STATE_ACTIVE;
-            if (self->master_fn)
-                (self->master_fn) (self->loop, NULL, self->master_arg);
+            // Allow client requests to turn us into the active if we've
+            // waited sufficiently long to believe the backup is not
+            // currently acting as active (i.e., after a failover)
+            assert (self->peer_expiry > 0);
+            if (zclock_time () >= self->peer_expiry) {
+                zclock_log ("I: request from client, ready as active");
+                self->state = STATE_ACTIVE;
+                if (self->active_fn)
+                    (self->active_fn) (self->loop, NULL, self->active_arg);
+            } else
+                // Don't respond to clients yet - it's possible we're
+                // performing a failback and the backup is currently active
+                rc = -1;
         }
     }
     else
@@ -103,10 +90,10 @@ s_execute_fsm (bstar_t *self)
     //  Rejects CLIENT_REQUEST events in this state
     if (self->state == STATE_BACKUP) {
         if (self->event == PEER_ACTIVE) {
-            zclock_log ("I: connected to primary (master), ready as slave");
+            zclock_log ("I: connected to primary (active), ready as passive");
             self->state = STATE_PASSIVE;
-            if (self->slave_fn)
-                (self->slave_fn) (self->loop, NULL, self->slave_arg);
+            if (self->passive_fn)
+                (self->passive_fn) (self->loop, NULL, self->passive_arg);
         }
         else
         if (self->event == CLIENT_REQUEST)
@@ -118,8 +105,8 @@ s_execute_fsm (bstar_t *self)
     //  The only way out of ACTIVE is death
     if (self->state == STATE_ACTIVE) {
         if (self->event == PEER_ACTIVE) {
-            //  Two masters would mean split-brain
-            zclock_log ("E: fatal error - dual masters, aborting");
+            //  Two actives would mean split-brain
+            zclock_log ("E: fatal error - dual actives, aborting");
             rc = -1;
         }
     }
@@ -129,29 +116,29 @@ s_execute_fsm (bstar_t *self)
     if (self->state == STATE_PASSIVE) {
         if (self->event == PEER_PRIMARY) {
             //  Peer is restarting - become active, peer will go passive
-            zclock_log ("I: primary (slave) is restarting, ready as master");
+            zclock_log ("I: primary (passive) is restarting, ready as active");
             self->state = STATE_ACTIVE;
         }
         else
         if (self->event == PEER_BACKUP) {
             //  Peer is restarting - become active, peer will go passive
-            zclock_log ("I: backup (slave) is restarting, ready as master");
+            zclock_log ("I: backup (passive) is restarting, ready as active");
             self->state = STATE_ACTIVE;
         }
         else
         if (self->event == PEER_PASSIVE) {
             //  Two passives would mean cluster would be non-responsive
-            zclock_log ("E: fatal error - dual slaves, aborting");
+            zclock_log ("E: fatal error - dual passives, aborting");
             rc = -1;
         }
         else
         if (self->event == CLIENT_REQUEST) {
-            //  Peer becomes master if timeout has passed
+            //  Peer becomes active if timeout has passed
             //  It's the client request that triggers the failover
             assert (self->peer_expiry > 0);
             if (zclock_time () >= self->peer_expiry) {
                 //  If peer is dead, switch to the active state
-                zclock_log ("I: failover successful, ready as master");
+                zclock_log ("I: failover successful, ready as active");
                 self->state = STATE_ACTIVE;
             }
             else
@@ -159,21 +146,25 @@ s_execute_fsm (bstar_t *self)
                 rc = -1;
         }
         //  Call state change handler if necessary
-        if (self->state == STATE_ACTIVE && self->master_fn)
-            (self->master_fn) (self->loop, NULL, self->master_arg);
+        if (self->state == STATE_ACTIVE && self->active_fn)
+            (self->active_fn) (self->loop, NULL, self->active_arg);
     }
     return rc;
 }
 
+static void
+s_update_peer_expiry (bstar_t *self)
+{
+    self->peer_expiry = zclock_time () + 2 * BSTAR_HEARTBEAT;
+}
 
-//  ---------------------------------------------------------------------
 //  Reactor event handlers...
 
 //  Publish our state to peer
 int s_send_state (zloop_t *loop, zmq_pollitem_t *poller, void *arg)
 {
     bstar_t *self = (bstar_t *) arg;
-    zstr_sendf (self->statepub, "%d", self->state);
+    zstr_send (self->statepub, "%d", self->state);
     return 0;
 }
 
@@ -184,7 +175,7 @@ int s_recv_state (zloop_t *loop, zmq_pollitem_t *poller, void *arg)
     char *state = zstr_recv (poller->socket);
     if (state) {
         self->event = atoi (state);
-        self->peer_expiry = zclock_time () + 2 * BSTAR_HEARTBEAT;
+        s_update_peer_expiry (self);
         free (state);
     }
     return s_execute_fsm (self);
@@ -196,10 +187,8 @@ int s_voter_ready (zloop_t *loop, zmq_pollitem_t *poller, void *arg)
     bstar_t *self = (bstar_t *) arg;
     //  If server can accept input now, call appl handler
     self->event = CLIENT_REQUEST;
-    if (s_execute_fsm (self) == 0) {
-        puts ("CLIENT REQUEST");
-        (self->voter_fn) (self->loop, poller->socket, self->voter_arg);
-    }
+    if (s_execute_fsm (self) == 0)
+        (self->voter_fn) (self->loop, poller, self->voter_arg);
     else {
         //  Destroy waiting message, no-one to read it
         zmsg_t *msg = zmsg_recv (poller->socket);
@@ -208,9 +197,11 @@ int s_voter_ready (zloop_t *loop, zmq_pollitem_t *poller, void *arg)
     return 0;
 }
 
-
-//  ---------------------------------------------------------------------
-//  Constructor
+//  .until
+//  .split constructor
+//  This is the constructor for our {{bstar}} class. We have to tell it 
+//  whether we're primary or backup server, as well as our local and 
+//  remote endpoints to bind and connect to:
 
 bstar_t *
 bstar_new (int primary, char *local, char *remote)
@@ -231,6 +222,7 @@ bstar_new (int primary, char *local, char *remote)
 
     //  Create subscriber for state coming from peer
     self->statesub = zsocket_new (self->ctx, ZMQ_SUB);
+    zsocket_set_subscribe (self->statesub, "");
     zsocket_connect (self->statesub, remote);
 
     //  Set-up basic reactor events
@@ -240,9 +232,8 @@ bstar_new (int primary, char *local, char *remote)
     return self;
 }
 
-
-//  ---------------------------------------------------------------------
-//  Destructor
+//  .split destructor
+//  The destructor shuts down the bstar reactor:
 
 void
 bstar_destroy (bstar_t **self_p)
@@ -257,10 +248,9 @@ bstar_destroy (bstar_t **self_p)
     }
 }
 
-
-//  ---------------------------------------------------------------------
-//  Return underlying zloop reactor, lets you add additional timers and
-//  readers.
+//  .split zloop method
+//  This method returns the underlying zloop reactor, so we can add
+//  additional timers and readers:
 
 zloop_t *
 bstar_zloop (bstar_t *self)
@@ -268,12 +258,11 @@ bstar_zloop (bstar_t *self)
     return self->loop;
 }
 
-
-//  ---------------------------------------------------------------------
-//  Create socket, bind to local endpoint, and register as reader for
-//  voting. The socket will only be available if the Binary Star state
-//  machine allows it. Input on the socket will act as a "vote" in the
-//  Binary Star scheme.  We require exactly one voter per bstar instance.
+//  .split voter method
+//  This method registers a client voter socket. Messages received
+//  on this socket provide the CLIENT_REQUEST events for the Binary Star
+//  FSM and are passed to the provided application handler. We require
+//  exactly one voter per {{bstar}} instance:
 
 int
 bstar_voter (bstar_t *self, char *endpoint, int type, zloop_fn handler,
@@ -289,41 +278,41 @@ bstar_voter (bstar_t *self, char *endpoint, int type, zloop_fn handler,
     return zloop_poller (self->loop, &poller, s_voter_ready, self);
 }
 
-//  ---------------------------------------------------------------------
-//  Register state change handlers
+//  .split register state-change handlers
+//  Register handlers to be called each time there's a state change:
 
 void
-bstar_new_master (bstar_t *self, zloop_fn handler, void *arg)
+bstar_new_active (bstar_t *self, zloop_fn handler, void *arg)
 {
-    assert (!self->master_fn);
-    self->master_fn = handler;
-    self->master_arg = arg;
+    assert (!self->active_fn);
+    self->active_fn = handler;
+    self->active_arg = arg;
 }
 
 void
-bstar_new_slave (bstar_t *self, zloop_fn handler, void *arg)
+bstar_new_passive (bstar_t *self, zloop_fn handler, void *arg)
 {
-    assert (!self->slave_fn);
-    self->slave_fn = handler;
-    self->slave_arg = arg;
+    assert (!self->passive_fn);
+    self->passive_fn = handler;
+    self->passive_arg = arg;
 }
 
+//  .split enable/disable tracing
+//  Enable/disable verbose tracing, for debugging:
 
-//  ---------------------------------------------------------------------
-//  Enable/disable verbose tracing
-void bstar_set_verbose (bstar_t *self, Bool verbose)
+void bstar_set_verbose (bstar_t *self, bool verbose)
 {
     zloop_set_verbose (self->loop, verbose);
 }
 
-
-//  ---------------------------------------------------------------------
-//  Start the reactor, ends if a callback function returns -1, or the
-//  process received SIGINT or SIGTERM.
+//  .split start the reactor
+//  Finally, start the configured reactor. It will end if any handler
+//  returns -1 to the reactor, or if the process receives SIGINT or SIGTERM:
 
 int
 bstar_start (bstar_t *self)
 {
     assert (self->voter_fn);
+    s_update_peer_expiry (self);
     return zloop_start (self->loop);
 }

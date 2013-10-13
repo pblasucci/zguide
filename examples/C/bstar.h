@@ -1,27 +1,6 @@
 /*  =====================================================================
-    bstar - Binary Star reactor
-
-    ---------------------------------------------------------------------
-    Copyright (c) 1991-2011 iMatix Corporation <www.imatix.com>
-    Copyright other contributors as noted in the AUTHORS file.
-
-    This file is part of the ZeroMQ Guide: http://zguide.zeromq.org
-
-    This is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or (at
-    your option) any later version.
-
-    This software is distributed in the hope that it will be useful, but
-    WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this program. If not, see
-    <http://www.gnu.org/licenses/>.
-    =====================================================================
-*/
+ *  bstar - Binary Star reactor
+ *  ===================================================================== */
 
 #ifndef __BSTAR_H_INCLUDED__
 #define __BSTAR_H_INCLUDED__
@@ -59,7 +38,7 @@ void bstar_new_master (bstar_t *self, zloop_fn handler, void *arg);
 void bstar_new_slave (bstar_t *self, zloop_fn handler, void *arg);
 
 //  Enable/disable verbose tracing
-void bstar_set_verbose (bstar_t *self, Bool verbose);
+void bstar_set_verbose (bstar_t *self, bool verbose);
 
 //  Start the reactor, ends if a callback function returns -1, or the
 //  process received SIGINT or SIGTERM.
