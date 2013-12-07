@@ -35,7 +35,7 @@ We assume you are using at least version 3.2 of 0MQ. We assume you are using a L
 The examples live in a public [https://github.com/imatix/zguide GitHub repository]. The simplest way to get all the examples is to clone this repository:
 
 [[code]]
-git clone --depth=1 git://github.com/imatix/zguide.git
+git clone --depth=1 https://github.com/imatix/zguide.git
 [[/code]]
 
 Next, browse the examples subdirectory. You'll find examples by language. If there are examples missing in a language you use, you're encouraged to [http://zguide.zeromq.org/main:translate submit a translation]. This is how this text became so useful, thanks to the work of many people. All examples are licensed under MIT/X11.
@@ -467,7 +467,7 @@ And a broker-centric setup needs its own operations team. You literally need to 
 
 So small to medium application developers are trapped. Either they avoid network programming and make monolithic applications that do not scale. Or they jump into network programming and make brittle, complex applications that are hard to maintain. Or they bet on a messaging product, and end up with scalable applications that depend on expensive, easily broken technology. There has been no really good choice, which is maybe why messaging is largely stuck in the last century and stirs strong emotions: negative ones for users, gleeful joy for those selling support and licenses[figure].
 
-What we need is something that does the job of messaging, but does it in such a simple and cheap way that it can work in any application, with close to zero cost. It should be a library which which you just link, without any other dependencies. No additional moving pieces, so no additional risk. It should run on any OS and work with any programming language.
+What we need is something that does the job of messaging, but does it in such a simple and cheap way that it can work in any application, with close to zero cost. It should be a library which you just link, without any other dependencies. No additional moving pieces, so no additional risk. It should run on any OS and work with any programming language.
 
 And this is 0MQ: an efficient, embeddable library that solves most of the problems an application needs to become nicely elastic across a network, without much cost.
 
@@ -497,7 +497,7 @@ Specifically:
 
 * It reduces your carbon footprint. Doing more with less CPU means your boxes use less power, and you can keep your old boxes in use for longer. Al Gore would love 0MQ.
 
-Actually 0MQ does rather more than this. It has a subversive effect on how you develop network-capable applications. Superficially, it's a socket-inspired API on which you do {{zmq_recv[3]}} and {{zmq_send[3]}}. But message processing rapidly becomes the central loop, and your application soon breaks down into a set of message processing tasks. It is elegant and natural. And it scales: each of these tasks maps to a node, and the nodes talk to each other across arbitrary transports. Two nodes in one process (node is a thread), two nodes on one box (node is a process), or two boxes on one network (node is a box)--it's all the same, with no application code changes.
+Actually 0MQ does rather more than this. It has a subversive effect on how you develop network-capable applications. Superficially, it's a socket-inspired API on which you do {{zmq_recv[3]}} and {{zmq_send[3]}}. But message processing rapidly becomes the central loop, and your application soon breaks down into a set of message processing tasks. It is elegant and natural. And it scales: each of these tasks maps to a node, and the nodes talk to each other across arbitrary transports. Two nodes in one process (node is a thread), two nodes on one box (node is a process), or two nodes on one network (node is a box)--it's all the same, with no application code changes.
 
 ++ Socket Scalability
 
