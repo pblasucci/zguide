@@ -17,12 +17,15 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <sys/time.h>
-#include <time.h>
-#include <unistd.h>
+
+#if (defined (WIN32))
+#   include <time.h>
+#else
+#   include <sys/time.h>
+#endif
+
 #include <assert.h>
 #include <signal.h>
-#include <uuid/uuid.h>
 
 //  Version checking, and patch up missing constants to match 2.1
 #if ZMQ_VERSION_MAJOR == 2
@@ -30,7 +33,7 @@
 #endif
 
 //  Provide random number from 0..(num-1)
-#if (defined (__WINDOWS__))
+#if (defined (WIN32))
 #   define randof(num)  (int) ((float) (num) * rand () / (RAND_MAX + 1.0))
 #else
 #   define randof(num)  (int) ((float) (num) * random () / (RAND_MAX + 1.0))
@@ -79,7 +82,7 @@ s_dump (void *socket)
         int size = zmq_msg_recv (&message, socket, 0);
 
         //  Dump the message as text or binary
-        char *data = zmq_msg_data (&message);
+        char *data = (char*)zmq_msg_data (&message);
         int is_text = 1;
         int char_nbr;
         for (char_nbr = 0; char_nbr < size; char_nbr++)
@@ -121,7 +124,7 @@ s_set_id (void *socket)
 static void
 s_sleep (int msecs)
 {
-#if (defined (__WINDOWS__))
+#if (defined (WIN32))
     Sleep (msecs);
 #else
     struct timespec t;
@@ -135,7 +138,7 @@ s_sleep (int msecs)
 static int64_t
 s_clock (void)
 {
-#if (defined (__WINDOWS__))
+#if (defined (WIN32))
     SYSTEMTIME st;
     GetSystemTime (&st);
     return (int64_t) st.wSecond * 1000 + st.wMilliseconds;
@@ -154,7 +157,7 @@ s_console (const char *format, ...)
 {
     time_t curtime = time (NULL);
     struct tm *loctime = localtime (&curtime);
-    char *formatted = malloc (20);
+    char *formatted = (char*)malloc (20);
     strftime (formatted, 20, "%y-%m-%d %H:%M:%S ", loctime);
     printf ("%s", formatted);
     free (formatted);

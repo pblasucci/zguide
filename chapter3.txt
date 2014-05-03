@@ -85,7 +85,7 @@ The {{zmq_socket[3]}} man page describes it thus:
 
 As a historical note, 0MQ v2.2 and earlier use UUIDs as identities, and 0MQ v3.0 and later use short integers. There's some impact on network performance, but only when you use multiple proxy hops, which is rare. Mostly the change was to simplify building {{libzmq}} by removing the dependency on a UUID library.
 
-Identies are a difficult concept to understand, but it's essential if you want to become a 0MQ expert. The ROUTER socket //invents// a random identity for each connection with which it works. If there are three REQ sockets connected to a ROUTER socket, it will invent three random identities, one for each REQ socket.
+Identities are a difficult concept to understand, but it's essential if you want to become a 0MQ expert. The ROUTER socket //invents// a random identity for each connection with which it works. If there are three REQ sockets connected to a ROUTER socket, it will invent three random identities, one for each REQ socket.
 
 So if we continue our worked example, let's say the REQ socket has a 3-byte identity {{ABC}}. Internally, this means the ROUTER socket keeps a hash table where it can search for {{ABC}} and find the TCP connection for the REQ socket.
 
@@ -149,7 +149,7 @@ Let's recap this:
 
 * The DEALER socket is oblivious to the reply envelope and handles this like any multipart message. DEALER sockets are asynchronous and like PUSH and PULL combined. They distribute sent messages among all connections, and fair-queue received messages from all connections.
 
-* The ROUTER socket is oblivious to the reply envelope, like DEALER. It creates identities for its connections, and passes these identities to the caller as a first frame in any received message. Conversely, when the caller sends a message, it use the first message frame as an identity to look up the connection to send to. ROUTERS are asynchronous.
+* The ROUTER socket is oblivious to the reply envelope, like DEALER. It creates identities for its connections, and passes these identities to the caller as a first frame in any received message. Conversely, when the caller sends a message, it uses the first message frame as an identity to look up the connection to send to. ROUTERS are asynchronous.
 
 ++ Request-Reply Combinations
 
@@ -898,7 +898,7 @@ The simplest interconnect is //federation//, in which brokers simulate clients a
                         :
 [[/code]]
 
-This would give us simple logic in both brokers and a reasonably good mechanism: when there are no clients, tell the other broker "ready", and accept one job from it. The problem is also that it is too simple for this problem. A federated broker would be able to handle only one task at a time. If the broker emulates a lock-step client and worker, it is by definition also going to be lock-step, and if it has lots of available workers they won't be used. Our brokers need to be connected in a fully asynchronous fashion.
+This would give us simple logic in both brokers and a reasonably good mechanism: when there are no workers, tell the other broker "ready", and accept one job from it. The problem is also that it is too simple for this problem. A federated broker would be able to handle only one task at a time. If the broker emulates a lock-step client and worker, it is by definition also going to be lock-step, and if it has lots of available workers they won't be used. Our brokers need to be connected in a fully asynchronous fashion.
 
 The federation model is perfect for other kinds of routing, especially service-oriented architectures (SOAs), which route by service name and proximity rather than load balancing or round robin. So don't dismiss it as useless, it's just not right for all use cases.
 
@@ -1043,7 +1043,7 @@ If we wanted to send state messages at precise intervals, we'd create a child th
 
 +++ Prototyping the Local and Cloud Flows
 
-Let's now prototype at the flow of tasks via the local and cloud sockets[figure]. This code pulls requests from clients and then distributes them to local workers and cloud peers on a random basis.
+Let's now prototype the flow of tasks via the local and cloud sockets[figure]. This code pulls requests from clients and then distributes them to local workers and cloud peers on a random basis.
 
 [[code type="textdiagram" title="The Flow of Tasks"]]
 #---------#  #---------#
